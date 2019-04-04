@@ -1,0 +1,22 @@
+{
+  "name": "dcm4chee-test",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Suo",
+  "license": "ISC",
+  "dependencies": {
+    "events": "^3.0.0",
+    "fs-extra": "^7.0.1",
+    "random": "^2.1.1",
+    "recursive-readdir": "^2.2.2",
+    "tree-kill": "^1.2.1",
+    "uuid": "^3.3.2"
+  }
+}
