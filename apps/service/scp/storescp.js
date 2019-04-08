@@ -65,7 +65,7 @@ async function createCommand(option){
     return new Promise(async function(resolve,reject) {
         let command = 'storescp.bat';
         if (os.platform().indexOf('win32') < 0) {
-            command = 'storescp';
+            command = './storescp';
         }
         const spawnOption = {
             // encoding: 'utf-8',

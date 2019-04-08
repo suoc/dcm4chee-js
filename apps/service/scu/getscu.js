@@ -73,7 +73,7 @@ class GetSCU extends EventEmitter{
 function createCommand(option){
     let command = 'getscu.bat';
     if (os.platform().indexOf('win32') < 0) {
-        command = 'getscu';
+        command = './getscu';
     }
     const spawnOption = {
         // encoding: 'utf-8',

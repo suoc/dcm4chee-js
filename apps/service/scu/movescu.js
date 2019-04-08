@@ -71,7 +71,7 @@ class MoveSCU extends EventEmitter{
 function createCommand(option){
     let command = 'movescu.bat';
     if (os.platform().indexOf('win32') < 0) {
-        command = 'movescu';
+        command = './movescu';
     }
     const spawnOption = {
         // encoding: 'utf-8',
