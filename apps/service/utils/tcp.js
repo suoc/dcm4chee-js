@@ -4,6 +4,8 @@
 const EventEmitter = require('events');
 const net = require('net');
 
+const tcpService = require('./services/tcpService');
+
 class Tcp extends EventEmitter{
     constructor(option){
         super();
@@ -23,31 +25,9 @@ class Tcp extends EventEmitter{
     }
 
     proxyTo(session,remoteOption){
-        let localSocket = session.socket;
-        let _this = this;
-        let remoteSocket = new net.Socket();
-        remoteSocket.connect(remoteOption);
-        localSocket.pipe(remoteSocket); 
-        remoteSocket.pipe(localSocket);
-
-        localSocket.on('end',function(){
-            // console.log('============local socket ended!========');
-            localSocket.destroy();
-        });
-        remoteSocket.on('end',function(){
-            // console.log('============remote socket ended!========');
-            remoteSocket.destroy();
-            _this.emit('session_end',{localSocket: localSocket,remoteSocket: remoteSocket});
-        });
-        localSocket.on('close',function(){
-            // console.log('============local socket closed!========');
-            // localSocket.destroy();
-            session.emit('close');
-        });
-        remoteSocket.on('close',function(){
-            // console.log('============remote socket closed!========');
-            _this.emit('session_close',{localSocket: localSocket,remoteSocket: remoteSocket});
-        });
+        session.remoteSocket.connect(remoteOption);
+        session.socket.pipe(session.remoteSocket); 
+        session.remoteSocket.pipe(session.socket);
     }
     
 }
@@ -56,6 +36,7 @@ function listenServerEvents(tcpServer) {
     tcpServer.server.on('connection',function(socket) {
         let emitter = new EventEmitter();
         emitter.socket = socket;
+        tcpService.createPip(emitter,tcpServer);
         tcpServer.emit('connection',emitter); 
     });
 }

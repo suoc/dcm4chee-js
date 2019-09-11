@@ -1,5 +1,5 @@
 {
-  "name": "dcm4chee-test",
+  "name": "dcm4che-js",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
@@ -12,11 +12,14 @@
   "author": "Suo",
   "license": "ISC",
   "dependencies": {
+    "chokidar": "^3.0.2",
     "events": "^3.0.0",
-    "fs-extra": "^7.0.1",
+    "find-free-port": "^2.0.0",
+    "fs-extra": "^8.0.1",
+    "moment": "^2.24.0",
     "random": "^2.1.1",
     "recursive-readdir": "^2.2.2",
     "tree-kill": "^1.2.1",
-    "uuid": "^3.3.2"
+    "uuid": "^3.3.3"
   }
 }

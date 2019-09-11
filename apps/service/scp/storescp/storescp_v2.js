@@ -10,10 +10,14 @@ const uuid = require('uuid/v4');
 const EventEmitter = require('events');
 const kill = require('tree-kill');
 const recursive = require("recursive-readdir");
+const moment = require('moment');
+const findFreePort = require('find-free-port');
+const random = require('random');
 
-const config = require('../../../configs/config');
-const Tcp = require('../utils/tcp');
+const config = require('../../../../configs/config');
+const Tcp = require('../../utils/tcp');
 
+const storescpFSService = require('./services/storescpFSService');
 
 class StoreSCP extends EventEmitter{
     constructor(option){
@@ -39,21 +43,28 @@ class StoreSCPServer extends EventEmitter{
     constructor(option){
         super();
         this.option = option;
-        this.command = createCommand(option);
+        // this.command = createCommand(option);
+        this.result = {
+            files: []
+        };
     }
 
     createStoreSCPServer(){
         let __this = this;
-        return new Promise(async function(resolve,reject) {
-            let spawnArgs = await createCommand(__this.option);
+        return new Promise(function(resolve,reject) {
 
-            const spawnObj = spawn(spawnArgs.command, spawnArgs.args, spawnArgs.spawnOption);
-            spawnObj.spawnArgs = spawnArgs;
-            listenSpawnEvents(spawnObj,__this,function(emitter){
-                emitter.spawnObj = spawnObj;
-                emitter.spawnArgs = spawnArgs;
-                resolve(emitter);
+            createCommand(__this.option).then(function(spawnArgs) {
+                const spawnObj = spawn(spawnArgs.command, spawnArgs.args, spawnArgs.spawnOption);
+                spawnObj.spawnArgs = spawnArgs;
+                listenSpawnEvents(spawnObj,__this,function(emitter){
+                    emitter.spawnObj = spawnObj;
+                    emitter.spawnArgs = spawnArgs;
+                    resolve(emitter);
+                });
+            }).catch(function(error) {
+                reject(error);
             });
+
         });
     }
 }
@@ -84,16 +95,23 @@ async function createCommand(option){
         args.push('-b');
         args.push(bind);
 
-        if (option.tmpDir) {
+        if (option.directory) {
             args.push('--directory');
-            args.push(path.join(option.tmpDir,uuid()));
+            let time = moment();
+            let directory = path.join(
+                                    option.directory
+                                    ,uuid()
+                                    ,time.format('YYYY')
+                                    ,time.format('MM')
+                                    ,time.format('DD'));
+            args.push(directory);
         }else{
-            args.push('--directory');
-            args.push(path.join(path.dirname(require.main.filename),'./tmp',uuid()));
+            throw new Error('Error: option.directory is null !');
         }
 
         args.push('--filepath');
-        args.push('{00100020}/{0020000D}/{0020000E}/{00080018}.dcm');
+        // args.push('{00100020}/{0020000D}/{0020000E}/{00080018}.dcm');
+        args.push('{00080018}.dcm');
 
         resolve({
             command: command,
@@ -119,12 +137,19 @@ function listenSpawnEvents(spawnObj,storescpObj,callback) {
     spawnObj.stdout.on('data', function(chunk) {
         if (chunk.toString().indexOf('Start TCP Listener') >= 0) {
             emitter.emit('storescpserver_open');
+
+            // 监听dcm存储文件夹
+            let downloadDir = spawnObj.spawnArgs.args[spawnObj.spawnArgs.args.indexOf('--directory')+1];
+            fse.ensureDir(downloadDir);
+            storescpObj.watcher = storescpFSService.watch(downloadDir,emitter,storescpObj);
+            return;
         }
 
-        emitter.emit('progress',chunk);
+
+        emitter.emit('progress',chunk.toString());
     });
-    spawnObj.stderr.on('data', (err) => {
-        emitter.emit('error',err);
+    spawnObj.stderr.on('data', (chunk) => {
+        emitter.emit('error',chunk.toString());
     });
     spawnObj.on('error', function(error) {
         emitter.emit('error',error);
@@ -153,54 +178,39 @@ function listenSpawnEvents(spawnObj,storescpObj,callback) {
  */
 function onend(spawnObj,storescpObj,emitter) {
     let status = spawnObj.status;
+
+    if (storescpObj.watcher) {
+        storescpObj.watcher.close();
+    }
     
     if (status.exitCode == -100 || status.closeCode == -100) {
         return;
     }
     
-    // console.log('======indexOf===>',spawnObj.spawnArgs.args[spawnObj.spawnArgs.args.indexOf('--directory')+1]);
-    let downloadDir = spawnObj.spawnArgs.args[spawnObj.spawnArgs.args.indexOf('--directory')+1];
-    let result = {};
     if (status.exitCode != -100 && status.closeCode != -100) {
-        recursive(downloadDir,async function (err, files) {
-            if (err) {
-                result.files = [];
-                return emitter.emit('result',result);
-            }
-            result.files = files;
-            if (storescpObj.option.directory) {
-                await moveToDirectory(result.files,storescpObj.option.directory,function(files) {
-                    result.files = files;
-                    emitter.emit('result',result);
-                });
-                await deleteTmpDir(downloadDir);
-                return;
-            }
-
-            emitter.emit('result',result);
-        });
+        emitter.emit('result',storescpObj.result);
     }else{
-        result.files =[];
-        emitter.emit('result',result);
+        // result.files =[];
+        emitter.emit('result',storescpObj.result);
     }
 
 }
 
 /** ================================================================TCP
  * 监听tcp socket事件
- * @param {*} storeSCPObj 
+ * @param {*} storeSCP_TCP_Obj 
  */
-function listenTcpEvents(storeSCPObj) {
-    let tcpServer = storeSCPObj.tcpServer;
+function listenTcpEvents(storeSCP_TCP_Obj) {
+    let tcpServer = storeSCP_TCP_Obj.tcpServer;
     tcpServer.on('open',function(option) {  
         // console.log('======open=========:',option.port);
-        storeSCPObj.emit('open',option.port);
+        storeSCP_TCP_Obj.emit('open',option.port);
     });
     tcpServer.on('connection',function(session) {  
         // console.log('======connection=========');
-        storeSCPObj.emit('connection',session);
+        storeSCP_TCP_Obj.emit('connection',session);
         
-        let storeSCPServer = new StoreSCPServer(storeSCPObj.option);
+        let storeSCPServer = new StoreSCPServer(storeSCP_TCP_Obj.option);
         let scpnode;
         storeSCPServer.createStoreSCPServer().then(function(client) {
             scpnode = client;
@@ -212,6 +222,9 @@ function listenTcpEvents(storeSCPObj) {
                 });
                 session.emit('storescpserver_open',client.spawnArgs.args[bind_index]);
             });
+            client.on('file',function(filePath) {
+                session.emit('file',filePath); 
+             });
             client.on('progress',function(data) {
                 session.emit('progress',data); 
             });
@@ -225,15 +238,17 @@ function listenTcpEvents(storeSCPObj) {
 
         session.on('close',function() {
             // console.log('==========session close========');
-            if (scpnode) {
-                kill(scpnode.spawnObj.pid,function(err) {
-                    if (err) {
-                        console.error('STORESCP','====storescp server close error====>',err);
-                        return;
-                    }
-                    console.log('STORESCP','=======kill success=====');
-                });
-            } 
+            setTimeout(function(){
+                if (scpnode) {
+                    kill(scpnode.spawnObj.pid,function(err) {
+                        if (err) {
+                            console.error('STORESCP','====storescp server close error====>',err);
+                            return;
+                        }
+                        console.log('STORESCP','=======kill success=====');
+                    });
+                } 
+            },30000);
         });
     });
 }
@@ -244,9 +259,8 @@ function listenTcpEvents(storeSCPObj) {
  * 拼接 bind 字符串
  * @param {*} option 
  */
-const random = require('random');
 async function makeBindStr(option) {
-    return new Promise(async function(resolve,reject) {
+    return new Promise(function(resolve,reject) {
         let bind = '';
         if (option.ae) {
             bind += option.ae;
@@ -262,71 +276,18 @@ async function makeBindStr(option) {
         if (option.backPorts) {
             backPorts = option.backPorts.split('-');
         }
-        let backport = '104';
-        for (let index = backPorts[0]; index <= backPorts[1]; index++) {
-            backport = random.int(backPorts[0], backPorts[1]);
-            try {
-                await require('../utils/portIsOccupied').portIsOccupied(backport);
-                break;
-            } catch (error) {
-                continue;
+        
+        // 获取空闲端口
+        let minPort = random.int(backPorts[0],backPorts[1]);
+        findFreePort(minPort,backPorts[1],function(err,backport) {
+            if (err) {
+                return reject(err);
             }
-        }
-        bind += (':'+backport);
-        resolve(bind);
+            // console.log('============================================',backport);
+            bind += (':'+backport);
+            resolve(bind);
+        });
     });
-}
-/**
- * 下载后把dcm文件移动到指定文件夹
- * @param {*} files 
- * @param {*} desDir 
- * @param {*} callback 
- */
-async function moveToDirectory(files,destDir,callback) {
-    let err_count = 0;
-    let newFiles = [];
-    for (const file of files) {
-        let filePath_parts = file.split(/[/|\\]/);
-        let lastPartIdx = filePath_parts.length-1;
-        let destFile = path.join(destDir,filePath_parts[lastPartIdx-3],filePath_parts[lastPartIdx-2],filePath_parts[lastPartIdx-1],filePath_parts[lastPartIdx]);
-        try {
-            await fse.move(file,destFile,{ overwrite: true });
-        } catch (error) {
-            console.error(error);  
-            err_count++;
-        }
-        newFiles.push(destFile);
-    }
-    if (err_count>0) {
-        for (const element of newFiles) {
-            if (fs.existsSync(element)) {
-                try {
-                    await fse.remove(element);
-                } catch (error) {
-                    console.error(error);                    
-                }
-            }
-        }
-        return callback([]);
-    }
-    return callback(newFiles);
-}
-/**
- * 删除缓存文件夹
- * @param {*} option 
- */
-async function deleteTmpDir(tmpDir) {
-    const exist = await fse.pathExists(tmpDir)
-    if (exist) {
-        fse.remove(tmpDir);
-    }
 }
 
 module.exports = StoreSCP;
-
-async function test(params) {
-    createCommand({
-        
-    });
-}
-// test();

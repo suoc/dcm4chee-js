@@ -136,7 +136,7 @@ function listenSpawnEvents(spawnObj,movescuObj,callback) {
         emitter.emit('error',err);
     });
     spawnObj.on('error', function(error) {
-        emitter.emit('error',err);
+        emitter.emit('error',error);
     });
     spawnObj.on('exit', (code) => {
         status.exitCode = code;
