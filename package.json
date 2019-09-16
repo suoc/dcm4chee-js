@@ -1,5 +1,5 @@
 {
-  "name": "dcm4che-js",
+  "name": "dimse-js",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
@@ -12,6 +12,7 @@
   "author": "Suo",
   "license": "ISC",
   "dependencies": {
+    "byline": "^5.0.0",
     "chokidar": "^3.0.2",
     "events": "^3.0.0",
     "find-free-port": "^2.0.0",

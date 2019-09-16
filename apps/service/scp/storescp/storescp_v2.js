@@ -13,6 +13,7 @@ const recursive = require("recursive-readdir");
 const moment = require('moment');
 const findFreePort = require('find-free-port');
 const random = require('random');
+const byline = require('byline');
 
 const config = require('../../../../configs/config');
 const Tcp = require('../../utils/tcp');
@@ -134,8 +135,28 @@ function listenSpawnEvents(spawnObj,storescpObj,callback) {
     }
     let status = spawnObj.status;
 
-    spawnObj.stdout.on('data', function(chunk) {
-        if (chunk.toString().indexOf('Start TCP Listener') >= 0) {
+    const stdoutStream = byline.createStream(spawnObj.stdout);
+    stdoutStream.on('data', function(chunk) {
+        let stdoutStr = chunk.toString();
+        // console.log('======>',stdoutStr);
+        
+        if (stdoutStr.indexOf('enter state: Sta1 - Idle') != -1) {
+            setTimeout(function(){
+                if (spawnObj.pid) {
+                    onend(spawnObj,storescpObj,emitter);
+                    
+                    // 杀死进程
+                    kill(spawnObj.pid,function(err) {
+                        if (err) {
+                            console.error('STORESCP','====storescp server close error====>',err);
+                            return;
+                        }
+                        console.log('STORESCP','=======kill success=====');
+                    });
+                } 
+            },2000);
+        }
+        if (stdoutStr.indexOf('Start TCP Listener') >= 0) {
             emitter.emit('storescpserver_open');
 
             // 监听dcm存储文件夹
@@ -145,11 +166,26 @@ function listenSpawnEvents(spawnObj,storescpObj,callback) {
             return;
         }
 
-
         emitter.emit('progress',chunk.toString());
     });
-    spawnObj.stderr.on('data', (chunk) => {
+    // 命令报错事件 监听
+    const stderrStream = byline.createStream(spawnObj.stderr);
+    stderrStream.on('data', (chunk) => {
         emitter.emit('error',chunk.toString());
+        setTimeout(function(){
+            if (spawnObj.pid) {
+                onend(spawnObj,storescpObj,emitter);
+                
+                // 杀死进程
+                kill(spawnObj.pid,function(err) {
+                    if (err) {
+                        console.error('STORESCP','====storescp server close error====>',err);
+                        return;
+                    }
+                    console.log('STORESCP','=======kill success=====');
+                });
+            } 
+        },2000);
     });
     spawnObj.on('error', function(error) {
         emitter.emit('error',error);
@@ -159,14 +195,14 @@ function listenSpawnEvents(spawnObj,storescpObj,callback) {
         if (code != 0 && code) {
             status.exitCode = code;
         }
-        onend(spawnObj,storescpObj,emitter);
+        // onend(spawnObj,storescpObj,emitter);
     });
     spawnObj.on('close', function(code) {
         status.closeCode = 0;
         if (code != 0 && code) {
             status.closeCode = code;
         }
-        onend(spawnObj,storescpObj,emitter);
+        // onend(spawnObj,storescpObj,emitter);
     });
     callback(emitter);
 }
@@ -177,22 +213,10 @@ function listenSpawnEvents(spawnObj,storescpObj,callback) {
  * @param {*} emitter 
  */
 function onend(spawnObj,storescpObj,emitter) {
-    let status = spawnObj.status;
-
     if (storescpObj.watcher) {
         storescpObj.watcher.close();
     }
-    
-    if (status.exitCode == -100 || status.closeCode == -100) {
-        return;
-    }
-    
-    if (status.exitCode != -100 && status.closeCode != -100) {
-        emitter.emit('result',storescpObj.result);
-    }else{
-        // result.files =[];
-        emitter.emit('result',storescpObj.result);
-    }
+    emitter.emit('result',storescpObj.result);
 
 }
 
@@ -238,7 +262,7 @@ function listenTcpEvents(storeSCP_TCP_Obj) {
 
         session.on('close',function() {
             // console.log('==========session close========');
-            setTimeout(function(){
+            /* setTimeout(function(){
                 if (scpnode) {
                     kill(scpnode.spawnObj.pid,function(err) {
                         if (err) {
@@ -248,7 +272,7 @@ function listenTcpEvents(storeSCP_TCP_Obj) {
                         console.log('STORESCP','=======kill success=====');
                     });
                 } 
-            },30000);
+            },30000); */
         });
     });
 }
