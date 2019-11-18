@@ -99,12 +99,11 @@ async function createCommand(option){
         if (option.directory) {
             args.push('--directory');
             let time = moment();
-            let directory = path.join(
-                                    option.directory
-                                    ,uuid()
+            let directory = path.join(option.directory
                                     ,time.format('YYYY')
                                     ,time.format('MM')
-                                    ,time.format('DD'));
+                                    ,time.format('DD')
+                                    ,uuid());
             args.push(directory);
         }else{
             throw new Error('Error: option.directory is null !');
@@ -151,7 +150,7 @@ function listenSpawnEvents(spawnObj,storescpObj,callback) {
                             console.error('STORESCP','====storescp server close error====>',err);
                             return;
                         }
-                        console.log('STORESCP','=======kill success=====');
+                        // console.log('STORESCP','=======kill success=====');
                     });
                 } 
             },2000);
@@ -182,7 +181,7 @@ function listenSpawnEvents(spawnObj,storescpObj,callback) {
                         console.error('STORESCP','====storescp server close error====>',err);
                         return;
                     }
-                    console.log('STORESCP','=======kill success=====');
+                    // console.log('STORESCP','=======kill success=====');
                 });
             } 
         },2000);

@@ -11,7 +11,7 @@ class storescpFSService {
 
     static watch(path,emmiter,storescpObj) {
         const watcher = chokidar.watch(path, {
-            ignored: '**.part',
+            ignored: /.*(\.part|\.jpg)/,
             persistent: true
         });
         

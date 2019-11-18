@@ -11,6 +11,7 @@ const GetSCU = require('./apps/service/scu/getscu');
 const StoreSCP = require('./apps/service/scp/storescp');
 const StoreSCP_V2 = require('./apps/service/scp/storescp/storescp_v2');
 const MoveSCU = require('./apps/service/scu/movescu');
+const FindSCU = require('./apps/service/scu/findscu');
 
 function init(){
     if (os.platform().indexOf('win32') < 0) {
@@ -36,5 +37,6 @@ module.exports = {
     GetSCU: GetSCU,
     StoreSCP: StoreSCP,
     StoreSCP_v2: StoreSCP_V2,
-    MoveSCU: MoveSCU
+    MoveSCU: MoveSCU,
+    FindSCU: FindSCU
 }

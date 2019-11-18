@@ -7,6 +7,7 @@ const fs = require('fs');
 const fse = require('fs-extra');
 const os = require('os');
 const uuid = require('uuid/v4');
+const byline = require('byline');
 
 const config = require('../../../configs/config');
 
@@ -30,7 +31,7 @@ class MoveSCU extends EventEmitter{
         return new Promise(function(resolve,reject) {
             let spawnArgs = createCommand(__this.option);
             if (!sid) {
-                return reject(new Error('Study must apply!!!'));
+                return reject(new Error('Study id must apply!!!'));
             }
             updateTmpDirByPid(spawnArgs,sid);
             spawnArgs.args.push('-m');
@@ -66,6 +67,49 @@ class MoveSCU extends EventEmitter{
             });
         });
     }
+
+    moveByStudyInstanceUId(pid){
+        let __this = this;
+        return new Promise(function(resolve,reject) {
+            let spawnArgs = createCommand(__this.option);
+            if (!pid) {
+                return reject(new Error('SOPInstanceUId must apply!!!'));
+            }
+
+            spawnArgs.args.push('-m');
+            spawnArgs.args.push('0020000D='+pid);
+
+            const spawnObj = spawn(spawnArgs.command, spawnArgs.args, spawnArgs.spawnOption);
+            spawnObj.spawnArgs = spawnArgs;
+            listenSpawnEvents(spawnObj,__this,function(emitter){
+                resolve(emitter);
+            });
+        });
+    }
+
+    moveBySOPInstanceUId(pid){
+        let __this = this;
+        return new Promise(function(resolve,reject) {
+            let spawnArgs = createCommand(__this.option);
+            if (!pid) {
+                return reject(new Error('SOPInstanceUId must apply!!!'));
+            }
+
+            spawnArgs.args.push('-L');
+            spawnArgs.args.push('PATIENT');
+            spawnArgs.args.push('-M');
+            spawnArgs.args.push('PatientRoot');
+
+            spawnArgs.args.push('-m');
+            spawnArgs.args.push('00080018='+pid);
+
+            const spawnObj = spawn(spawnArgs.command, spawnArgs.args, spawnArgs.spawnOption);
+            spawnObj.spawnArgs = spawnArgs;
+            listenSpawnEvents(spawnObj,__this,function(emitter){
+                resolve(emitter);
+            });
+        });
+    }
 }
 
 function createCommand(option){
@@ -86,6 +130,10 @@ function createCommand(option){
         args.push('-c');
         args.push(option.connect);
     }
+
+    args.push('--release-timeout');
+    args.push('5000');
+
     if (option.dest) {
         args.push('-dest');
         args.push(option.dest);
@@ -114,11 +162,36 @@ function listenSpawnEvents(spawnObj,movescuObj,callback) {
     var reg_completed = /\[(\d*)\]\sNumberOfCompletedSuboperations/;
     var reg_failed = /\[(\d*)\]\sNumberOfFailedSuboperations/;
     var reg_warning = /\[(\d*)\]\sNumberOfWarningSuboperations/;
+    let reg_move_progress = /C-MOVE-RSP\[pcid=1, remaining=(\d*)\, completed=(\d*)\, failed=(\d*)\, warning=(\d*), status/;
+    let reg_move_result = /C-MOVE-RSP\[pcid=1, completed=(\d*)\, failed=(\d*)\, warning=(\d*), status/;
 
-    spawnObj.stdout.on('data', function(chunk) {
+    const stdoutStream = byline.createStream(spawnObj.stdout);
+    stdoutStream.on('data', function(chunk) {
         let dataStr = chunk.toString();
-        emitter.emit('progress',chunk);
-        let completed = reg_completed.exec(dataStr);
+        let progressRegResult = reg_move_progress.exec(dataStr);
+        let resultRegResult = reg_move_result.exec(dataStr);
+
+        if (progressRegResult) {
+            emitter.emit('progress',{
+                remaining: progressRegResult[1],
+                completed: progressRegResult[2],
+                failed: progressRegResult[3],
+                warning: progressRegResult[4],
+            });
+            return;
+        }
+        if (resultRegResult) {
+            emitter.emit('result',{
+                completed: resultRegResult[1],
+                failed: resultRegResult[2],
+                warning: resultRegResult[3],
+            });
+            return;
+        }
+
+        // emitter.emit('progress',dataStr);
+        
+        /* let completed = reg_completed.exec(dataStr);
         let failed = reg_failed.exec(dataStr);
         let warning = reg_warning.exec(dataStr);
         if (completed) {
@@ -129,22 +202,22 @@ function listenSpawnEvents(spawnObj,movescuObj,callback) {
         }
         if (warning) {
             result.warning = warning[1];
-        }
+        } */
     });
     spawnObj.stderr.on('data', (err) => {
 
         emitter.emit('error',err);
     });
     spawnObj.on('error', function(error) {
-        emitter.emit('error',error);
+        emitter.emit('error',error.toString());
     });
     spawnObj.on('exit', (code) => {
         status.exitCode = code;
-        onend(spawnObj,movescuObj,emitter);
+        // onend(spawnObj,movescuObj,emitter);
     });
     spawnObj.on('close', function(code) {
         status.closeCode = code;
-        onend(spawnObj,movescuObj,emitter);
+        // onend(spawnObj,movescuObj,emitter);
     });
     callback(emitter);
 }
